@@ -1,0 +1,199 @@
+/* ============================================================
+   抖音续火花助手 · 主题系统
+   双主题（light / dark），通过 <html data-theme> 切换
+   设计 token 提取自 Ardot 设计稿 719111539233724
+   ============================================================ */
+
+:root,
+[data-theme="light"] {
+  /* 表面层级 */
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-soft: #fafbfc;
+  --surface-mute: #f0f3f8;
+  --surface-hover: #f5f7fa;
+
+  /* 文本 */
+  --text: #1f2329;
+  --text-2: #555555;
+  --text-3: #6a737d;
+  --text-4: #a4abb4;
+
+  /* 边框 */
+  --border: #e6e8eb;
+  --border-soft: #eef0f3;
+  --border-strong: #bbbbbb;
+
+  /* 品牌色（橙红） */
+  --brand: #ff5b3a;
+  --brand-2: #f43f5e;
+  --brand-grad: linear-gradient(135deg, #ff5b3a 0%, #f43f5e 100%);
+  --brand-grad-soft: linear-gradient(135deg, #ff8e62 0%, #f43f5e 100%);
+  --brand-soft: #fff1ed;
+  --brand-border: #ff2c2c;
+  --brand-text: #ff5b3a;
+
+  /* 状态色 */
+  --ok-bg: #e8f7ee;
+  --ok: #1f9d55;
+  --ok-deep: #088138;
+  --fail-bg: #ffd4d4;
+  --fail: #a71c1c;
+  --warn-bg: #fff6e5;
+  --warn: #b0832f;
+  --warn-deep: #d78b0f;
+  --mute-bg: #f0f3f8;
+  --mute: #6a737d;
+
+  /* 运行状态胶囊 */
+  --run-bg: #d7f0eb;
+  --run-border: #a8e8cd;
+  --run-text: #1f9d55;
+
+  /* 热力图（GitHub 风，橙红系） */
+  --heat-0: #ebedf0;
+  --heat-1: #ffc4b0;
+  --heat-2: #ff8e62;
+  --heat-3: #ff5b3a;
+  --heat-4: #d92d0c;
+
+  /* 阴影 */
+  --shadow: 0 4px 16px rgba(20, 23, 31, 0.06);
+  --shadow-lg: 0 10px 32px rgba(20, 23, 31, 0.1);
+
+  /* 日志框 */
+  --log-bg: #1e1e1e;
+  --log-text: #d4d4d4;
+
+  /* Element Plus 变量映射 */
+  --el-color-primary: var(--brand);
+  --el-color-primary-light-3: #ff8e62;
+  --el-color-primary-light-5: #ffb49a;
+  --el-color-primary-light-7: #ffd2c2;
+  --el-color-primary-light-8: #ffe0d6;
+  --el-color-primary-light-9: var(--brand-soft);
+  --el-color-primary-dark-2: #e64a2d;
+  --el-color-success: var(--ok);
+  --el-color-warning: var(--warn-deep);
+  --el-color-danger: #e74c3c;
+  --el-color-error: #e74c3c;
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--bg);
+  --el-bg-color-overlay: var(--surface);
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text-2);
+  --el-text-color-secondary: var(--text-3);
+  --el-text-color-placeholder: var(--text-4);
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border-soft);
+  --el-border-color-lighter: var(--border-soft);
+  --el-border-color-extra-light: var(--border-soft);
+  --el-fill-color: var(--surface-mute);
+  --el-fill-color-light: var(--surface-hover);
+  --el-fill-color-lighter: var(--surface-soft);
+  --el-fill-color-blank: var(--surface);
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 20px;
+  --el-box-shadow: var(--shadow);
+  --el-box-shadow-light: var(--shadow);
+  --el-box-shadow-lighter: var(--shadow);
+  --el-box-shadow-dark: var(--shadow-lg);
+  --el-mask-color: rgba(20, 23, 31, 0.5);
+}
+
+[data-theme="dark"] {
+  /* 表面层级 */
+  --bg: #0e1014;
+  --surface: #161a21;
+  --surface-soft: #1c212b;
+  --surface-mute: #232935;
+  --surface-hover: #1f2530;
+
+  /* 文本 */
+  --text: #e8eaed;
+  --text-2: #b8bdc6;
+  --text-3: #9aa0a6;
+  --text-4: #6b7280;
+
+  /* 边框 */
+  --border: #262c38;
+  --border-soft: #20262f;
+  --border-strong: #3a4250;
+
+  /* 品牌色（暗色下略提亮） */
+  --brand: #ff6a4a;
+  --brand-2: #f43f5e;
+  --brand-grad: linear-gradient(135deg, #ff6a4a 0%, #f43f5e 100%);
+  --brand-grad-soft: linear-gradient(135deg, #ff8e62 0%, #f43f5e 100%);
+  --brand-soft: rgba(255, 91, 58, 0.14);
+  --brand-border: #ff5b3a;
+  --brand-text: #ff7a5c;
+
+  /* 状态色（暗色用半透明底 + 亮色文字） */
+  --ok-bg: rgba(46, 204, 113, 0.14);
+  --ok: #4ade80;
+  --ok-deep: #4ade80;
+  --fail-bg: rgba(231, 76, 60, 0.18);
+  --fail: #f87171;
+  --warn-bg: rgba(240, 160, 32, 0.14);
+  --warn: #fbbf24;
+  --warn-deep: #fbbf24;
+  --mute-bg: #232935;
+  --mute: #9aa0a6;
+
+  /* 运行状态胶囊 */
+  --run-bg: rgba(46, 204, 113, 0.14);
+  --run-border: rgba(46, 204, 113, 0.35);
+  --run-text: #4ade80;
+
+  /* 热力图 */
+  --heat-0: #262c38;
+  --heat-1: #7a3625;
+  --heat-2: #b04a2a;
+  --heat-3: #ff6a4a;
+  --heat-4: #ff8e62;
+
+  /* 阴影 */
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.5);
+
+  /* 日志框 */
+  --log-bg: #0a0c10;
+  --log-text: #c9d1d9;
+
+  /* Element Plus 暗色映射 */
+  --el-color-primary: var(--brand);
+  --el-color-primary-light-3: #d14a2e;
+  --el-color-primary-light-5: #8f3320;
+  --el-color-primary-light-7: #5c2215;
+  --el-color-primary-light-8: #421811;
+  --el-color-primary-light-9: rgba(255, 91, 58, 0.14);
+  --el-color-primary-dark-2: #ff8e62;
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--bg);
+  --el-bg-color-overlay: var(--surface-soft);
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text-2);
+  --el-text-color-secondary: var(--text-3);
+  --el-text-color-placeholder: var(--text-4);
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border-soft);
+  --el-border-color-lighter: var(--border-soft);
+  --el-border-color-extra-light: var(--border-soft);
+  --el-fill-color: var(--surface-mute);
+  --el-fill-color-light: var(--surface-hover);
+  --el-fill-color-lighter: var(--surface-soft);
+  --el-fill-color-blank: var(--surface);
+  --el-mask-color: rgba(0, 0, 0, 0.65);
+}
+
+/* 主题切换过渡（仅背景/文字色，避免布局抖动） */
+html,
+body,
+.card,
+.topbar,
+.nav-item,
+.heat-cell {
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}

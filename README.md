@@ -44,7 +44,12 @@ core/automation.py        Playwright 自动化发送 / 好友列表读取
 core/scheduler.py         每日定时与当日补发调度
 core/config.py            配置读写
 core/runtime.py           状态、日志与运行记录
-static/index.html         网页管理界面（Vue 3 + Element Plus，本地资源）
+static/index.html         网页管理界面壳（Vue 3 + Element Plus，本地资源）
+static/css/theme.css      双主题设计变量（浅色 / 深色）
+static/css/app.css        组件样式
+static/js/app.js          前端主逻辑（4 视图 hash 路由）
+static/js/icons.js        内联 SVG 图标（由 icons/ 生成）
+static/icons/             Ardot 设计稿导出的 SVG 图标
 deploy/deploy.sh          Debian/Ubuntu 一键部署脚本
 deploy/douyin-spark.service  systemd 单元文件
 data/                     运行时生成：config.json / state.json / runtime.json / logs/

@@ -3,3 +3,6 @@ data/
 __pycache__/
 *.pyc
 .env
+*docker*
+README-UGREEN.md
+.workbuddy

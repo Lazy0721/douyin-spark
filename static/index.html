@@ -1,173 +1,348 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>抖音续火花助手</title>
   <link rel="stylesheet" href="/static/vendor/element-plus.css" />
-  <style>
-    body { margin: 0; background: #f5f7fa; }
-    .page { max-width: 1080px; margin: 0 auto; padding: 16px; }
-    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-    .header h1 { font-size: 20px; margin: 0 8px 0 0; }
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
-    .cards .el-card { --el-card-padding: 14px; }
-    .card-label { color: #909399; font-size: 12px; margin-bottom: 6px; }
-    .card-value { font-size: 18px; font-weight: 600; }
-    .log-pre { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 6px; height: 420px; overflow: auto; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
-    .result-box { margin-top: 12px; }
-    .spacer { flex: 1; }
-  </style>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <script>
+    // 主题初始化（在 Vue mount 前执行，避免闪烁）
+    (function () {
+      var t = localStorage.getItem('ds_theme');
+      if (!t) t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
 </head>
 <body>
   <div id="app">
-    <div class="page">
-      <div class="header">
-        <h1>🔥 抖音续火花助手</h1>
-        <el-tag v-if="status.session_status === 'ok'" type="success">登录正常</el-tag>
-        <el-tag v-else-if="status.session_status === 'expired'" type="danger">登录态已过期</el-tag>
-        <el-tag v-else-if="status.session_status === 'partial'" type="warning">部分发送成功</el-tag>
-        <el-tag v-else-if="status.session_status === 'failed'" type="danger">发送失败</el-tag>
-        <el-tag v-else type="info">状态未知</el-tag>
-        <el-tag v-if="status.running" type="warning">运行中…</el-tag>
-        <div class="spacer"></div>
-        <el-button size="small" @click="loadAll">刷新</el-button>
-        <el-button size="small" @click="showTokenDialog">令牌</el-button>
+    <!-- ============ 顶部栏 ============ -->
+    <div class="topbar">
+      <div class="topbar-logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 23c-4.97 0-8-3.58-8-8 0-2.5 1.5-5 3-6.5S10 4 10 4s-.5 2 1 3.5c1-1 1.5-3 1-5.5 0 0 4 2 5.5 6S19 12 19 15c0 4.42-2.03 8-7 8z"/></svg>
+        </div>
+        <span class="logo-text">抖音续火花助手</span>
       </div>
 
-      <el-tabs v-model="tab">
-        <el-tab-pane label="概览" name="overview">
-          <div class="cards">
-            <el-card shadow="never">
-              <div class="card-label">登录态文件</div>
-              <div class="card-value">{{ status.state_file_exists ? '已上传' : '未上传' }}</div>
-            </el-card>
-            <el-card shadow="never">
-              <div class="card-label">运行状态</div>
-              <div class="card-value">{{ status.running ? '运行中' : '空闲' }}</div>
-            </el-card>
-            <el-card shadow="never">
-              <div class="card-label">下次自动发送</div>
-              <div class="card-value">{{ fmt(status.next_run) || '未设置' }}</div>
-            </el-card>
-            <el-card shadow="never">
-              <div class="card-label">历史执行次数</div>
-              <div class="card-value">{{ status.history_count }}</div>
-            </el-card>
-          </div>
+      <div class="topbar-nav">
+        <div v-for="v in views" :key="v.name"
+             class="nav-item" :class="{ active: activeView === v.name }"
+             @click="goView(v.name)">
+          <span class="icon" v-html="v.icon"></span>
+          <span class="nav-label" v-if="activeView === v.name">{{ v.label }}</span>
+        </div>
+      </div>
 
-          <el-card shadow="never">
-            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-              <el-button type="primary" :loading="status.running" @click="triggerRun(false)">立即发送</el-button>
-              <el-button :loading="status.running" @click="triggerRun(true)">干跑测试（不真实发送）</el-button>
-              <el-upload
-                :auto-upload="false"
-                :limit="1"
-                accept=".json"
-                :on-change="onFileChange"
-                :on-remove="onFileRemove"
-                style="display:inline-block;">
-                <el-button>选择 state.json</el-button>
-              </el-upload>
-              <el-button type="success" :disabled="!uploadFile" @click="uploadState">上传登录态</el-button>
-            </div>
-            <div class="result-box" v-if="status.last_run">
-              <el-divider content-position="left">上次执行（{{ fmt(status.last_run.at) }}<template v-if="status.last_run.dry_run">，干跑</template>）</el-divider>
-              <div style="margin-bottom:6px;">
-                <span style="color:#67c23a;">成功 {{ status.last_run.ok.length }} 人：</span>
-                <el-tag v-for="n in status.last_run.ok" :key="n" size="small" type="success" style="margin:2px;">{{ n }}</el-tag>
-              </div>
-              <div>
-                <span style="color:#f56c6c;">失败 {{ status.last_run.failed.length }} 人：</span>
-                <el-tooltip v-for="f in status.last_run.failed" :key="f.name" :content="f.reason" placement="top">
-                  <el-tag size="small" type="danger" style="margin:2px;">{{ f.name }}</el-tag>
-                </el-tooltip>
-              </div>
-              <el-alert v-if="status.last_run.logged_out" type="error" :closable="false" style="margin-top:8px;"
-                title="登录态已过期：请在电脑上重新运行 extract_cookie.py 并重新上传登录态"></el-alert>
-              <el-alert v-else-if="status.last_run.rate_limited" type="warning" :closable="false" style="margin-top:8px;"
-                title="疑似触发抖音限流：本轮已停止，下次定时任务会自动补发"></el-alert>
-            </div>
-          </el-card>
-        </el-tab-pane>
-
-        <el-tab-pane label="好友与消息" name="friends">
-          <el-card shadow="never">
-            <div style="margin-bottom:14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-              <el-button type="primary" :loading="contactsFetching" @click="fetchContacts">获取聊天列表</el-button>
-              <span style="color:#909399; font-size:12px;">
-                <template v-if="contacts.length">共 {{ contacts.length }} 个聊天对象，最后更新 {{ fmt(contactsAt) }}</template>
-                <template v-else-if="contactsError">获取失败：{{ contactsError }}</template>
-                <template v-else>点击按钮从抖音聊天列表读取好友，勾选即可，免手动输入</template>
-              </span>
-            </div>
-            <div v-if="contacts.length" style="margin-bottom:16px; max-height:260px; overflow:auto; border:1px solid #ebeef5; border-radius:6px; padding:10px 14px;">
-              <el-checkbox-group v-model="selectedFriends">
-                <el-checkbox v-for="c in contacts" :key="c.name" :label="c.name" style="margin:4px 20px 4px 0;">
-                  {{ c.name }}<el-tag v-if="c.streak" size="small" type="warning" style="margin-left:6px;">🔥 {{ c.streak }}</el-tag>
-                </el-checkbox>
-              </el-checkbox-group>
-            </div>
-            <el-form label-width="110px">
-              <el-form-item label="续火花好友">
-                <el-input v-model="friendsText" type="textarea" :rows="5"
-                  placeholder="已选好友名单（每行一个）；也可手动补充聊天列表里显示的备注 / 昵称 / 抖音号"></el-input>
-              </el-form-item>
-              <el-form-item label="消息模板">
-                <el-input v-model="messagesText" type="textarea" :rows="5"
-                  placeholder="每行一条，每次随机选择一条发送"></el-input>
-              </el-form-item>
-              <el-form-item>
-                <el-button type="primary" @click="saveFriends">保存</el-button>
-                <el-button @click="applySelection">把勾选结果写入名单</el-button>
-              </el-form-item>
-            </el-form>
-          </el-card>
-        </el-tab-pane>
-
-        <el-tab-pane label="定时设置" name="settings">
-          <el-card shadow="never">
-            <el-form label-width="150px">
-              <el-form-item label="每天发送时间">
-                <el-input v-model="settingsForm.schedule_time" type="time" style="width:160px;"></el-input>
-              </el-form-item>
-              <el-form-item label="时间抖动窗口（分钟）">
-                <el-input-number v-model="settingsForm.jitter_minutes" :min="0" :max="240"></el-input-number>
-                <span style="margin-left:8px;color:#909399;font-size:12px;">在设定时间后 0～N 分钟内随机开始，避免每天同一秒发送</span>
-              </el-form-item>
-              <el-form-item label="好友间隔（秒）">
-                <el-input-number v-model="settingsForm.send_gap_min" :min="1" :max="300"></el-input-number>
-                <span style="margin:0 6px;">至</span>
-                <el-input-number v-model="settingsForm.send_gap_max" :min="1" :max="300"></el-input-number>
-              </el-form-item>
-              <el-form-item label="每次最多发送人数">
-                <el-input-number v-model="settingsForm.max_friends_per_run" :min="0" :max="200"></el-input-number>
-                <span style="margin-left:8px;color:#909399;font-size:12px;">0 表示不限制</span>
-              </el-form-item>
-              <el-form-item>
-                <el-button type="primary" @click="saveSettings">保存</el-button>
-              </el-form-item>
-            </el-form>
-          </el-card>
-        </el-tab-pane>
-
-        <el-tab-pane label="日志" name="logs">
-          <el-card shadow="never">
-            <div style="display:flex; gap:8px; margin-bottom:10px;">
-              <el-button size="small" @click="loadLogs">刷新日志</el-button>
-              <el-checkbox v-model="autoRefresh">自动刷新</el-checkbox>
-            </div>
-            <pre class="log-pre">{{ logs || '暂无日志' }}</pre>
-          </el-card>
-        </el-tab-pane>
-      </el-tabs>
+      <div class="topbar-right">
+        <button class="tool-btn icon-only" @click="toggleTheme" :title="theme === 'dark' ? '切换浅色' : '切换深色'">
+          <span class="icon" v-html="themeIcon"></span>
+        </button>
+        <button class="tool-btn icon-only" @click="loadAll" title="刷新">
+          <span class="icon" v-html="icons.refresh"></span>
+        </button>
+        <button class="tool-btn" @click="showTokenDialog">令牌</button>
+        <div class="session-tag" :class="sessionTagClass">
+          <span class="dot"></span>{{ sessionTagText }}
+        </div>
+      </div>
     </div>
 
+    <!-- ============ 视图 1：首页总览 ============ -->
+    <div class="main" v-show="activeView === 'overview'">
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">今日续火花概览</h1>
+          <div class="page-sub">抖音账号自动化发送与管理 · {{ todayText }}</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-plain" :disabled="status.running" @click="triggerRun(true)">干跑测试</button>
+          <button class="btn btn-primary" :disabled="status.running" @click="triggerRun(false)">
+            <span class="icon icon-13" v-html="icons.flash"></span>立即发送
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <span class="run-pill" :class="{ busy: status.running }">
+          <span class="pulse" v-if="status.running"></span>
+          <span class="dot" v-else></span>
+          {{ status.running ? '发送任务运行中…' : '当前没有发送任务运行' }}
+        </span>
+      </div>
+
+      <div class="stats-row">
+        <!-- 续火花数据 -->
+        <div class="card stats-left-card">
+          <div class="progress-zone">
+            <div class="progress-title">今日续火花进度</div>
+            <div class="ring-wrap">
+              <svg width="156" height="156" viewBox="0 0 156 156">
+                <defs>
+                  <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#ff5b3a" />
+                    <stop offset="100%" stop-color="#f43f5e" />
+                  </linearGradient>
+                </defs>
+                <circle cx="78" cy="78" r="64" fill="none" :stroke="ringTrack" stroke-width="12" />
+                <circle cx="78" cy="78" r="64" fill="none" stroke="url(#ringGrad)" stroke-width="12"
+                        stroke-linecap="round"
+                        :stroke-dasharray="ringDash" :stroke-dashoffset="ringOffset" />
+              </svg>
+              <div class="ring-center">
+                <div class="ring-num">{{ todayStats.ok }}<small> / {{ todayStats.total }}</small></div>
+                <div class="ring-label">今日成功 / 总目标</div>
+                <div class="ring-pct">{{ todayStats.pct }}% 已完成</div>
+              </div>
+            </div>
+            <span class="last-run-pill" v-if="status.last_run">
+              <span class="icon icon-13" v-html="icons.clock"></span>
+              上次执行：{{ fmt(status.last_run.at) }}
+            </span>
+          </div>
+          <div class="mini-stats">
+            <div class="mini-card">
+              <div class="mini-card-head"><span class="icon icon-16" v-html="icons.calendar"></span>下次自动发送</div>
+              <div class="mini-card-value">{{ status.next_run ? fmtShort(status.next_run) : '未设置' }}</div>
+              <div class="mini-card-sub">{{ countdownText }}</div>
+            </div>
+            <div class="mini-card">
+              <div class="mini-card-head"><span class="icon icon-16" v-html="icons.refresh"></span>历史执行次数</div>
+              <div class="mini-card-value big">{{ status.history_count }}</div>
+              <div class="mini-card-sub">累计触发自动化流程 {{ status.history_count }} 次</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 火花连击 -->
+        <div class="card">
+          <div class="card-head"><span class="card-title">火花连胜</span></div>
+          <div class="streak-mid">
+            <div class="flame-block">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 23c-4.97 0-8-3.58-8-8 0-2.5 1.5-5 3-6.5S10 4 10 4s-.5 2 1 3.5c1-1 1.5-3 1-5.5 0 0 4 2 5.5 6S19 12 19 15c0 4.42-2.03 8-7 8z"/></svg>
+            </div>
+            <div>
+              <div class="streak-big">{{ streak.days }} 天</div>
+              <div class="streak-sub">连续天数 · 最长账号</div>
+            </div>
+          </div>
+          <div class="streak-lines">
+            <div class="streak-line"><span>近 7 天成功率</span><b>{{ streak.weekRate }} %</b></div>
+            <div class="streak-line"><span>本周已续火花</span><b>{{ streak.weekOk }} / {{ streak.weekTotal }} 次</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 今日状态分布 -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">今日状态分布</span></div>
+        <div class="dist-grid">
+          <div class="dist-cell dist-ok"><span class="dist-label">今日成功</span><span class="dist-num">{{ todayStats.ok }}</span></div>
+          <div class="dist-cell dist-fail"><span class="dist-label">失败待补发</span><span class="dist-num">{{ todayStats.fail }}</span></div>
+          <div class="dist-cell dist-warn"><span class="dist-label">待发送</span><span class="dist-num">{{ todayStats.pending }}</span></div>
+          <div class="dist-cell dist-mute"><span class="dist-label">未处理</span><span class="dist-num">0</span></div>
+        </div>
+      </div>
+
+      <!-- 热力图 -->
+      <div class="heat-section-head">
+        <span class="heat-title">月度火花打卡 · 热力图</span>
+        <button class="heat-year-btn" @click="toggleHeatYear">{{ heatYear }}</button>
+      </div>
+      <div class="heat-layout">
+        <div class="card heat-card">
+          <div class="heat-grid">
+            <div v-for="(cell, i) in heatCells" :key="i" class="heat-cell"
+                 :class="cell.level ? 'lv' + cell.level : ''"
+                 :title="cell.date ? cell.date + (cell.count ? ' · 成功 ' + cell.count + ' 次' : ' · 无记录') : ''"></div>
+          </div>
+          <div class="heat-legend">
+            少
+            <span class="heat-cell"></span>
+            <span class="heat-cell lv1"></span>
+            <span class="heat-cell lv2"></span>
+            <span class="heat-cell lv3"></span>
+            <span class="heat-cell lv4"></span>
+            多
+          </div>
+        </div>
+        <div class="card heat-months">
+          <button v-for="m in 12" :key="m" class="heat-month"
+                  :class="{ active: heatMonth === m }"
+                  :disabled="isFutureMonth(m)"
+                  @click="heatMonth = m">{{ m }} 月</button>
+        </div>
+      </div>
+
+      <!-- 底部两栏 -->
+      <div class="bottom-row">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">实时发送动态</span>
+            <span class="card-link" @click="goView('logs')">查看全部 →</span>
+          </div>
+          <div class="feed-list">
+            <div v-for="(f, i) in feedItems" :key="i" class="feed-item">
+              <div class="feed-ic" :class="f.ok ? 'ok' : 'fail'">{{ f.ok ? '✓' : '✕' }}</div>
+              <div class="feed-body">
+                <div class="feed-title">{{ f.title }}</div>
+                <div class="feed-sub">{{ f.sub }}</div>
+              </div>
+              <span class="feed-time">{{ f.time }}</span>
+            </div>
+            <div v-if="!feedItems.length" class="feed-empty">暂无发送动态，执行一次任务后这里会展示</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">登录抖音账号</span>
+            <span class="login-status-tag" :class="{ off: !status.state_file_exists }">
+              <span class="dot"></span>{{ status.state_file_exists ? '已上传' : '未上传' }}
+            </span>
+          </div>
+          <div class="login-guide">
+            <div class="login-guide-title">扫码登录步骤</div>
+            <div class="login-guide-step">1. 在本机终端执行 extract_cookie.py</div>
+            <div class="login-guide-step">2. 浏览器弹窗扫码登录账号</div>
+            <div class="login-guide-step">3. 上传导出的 state.json 文件</div>
+          </div>
+          <el-upload :auto-upload="false" :limit="1" accept=".json"
+                     :on-change="onFileChange" :on-remove="onFileRemove"
+                     style="margin-bottom: 12px;">
+            <button class="btn btn-plain btn-block">选择 state.json</button>
+          </el-upload>
+          <button class="btn btn-primary btn-lg btn-block" :disabled="!uploadFile" @click="uploadState">上传 state.json</button>
+          <div class="login-note">登录态通常可维持数天到数周，过期会标红提醒</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 视图 2：好友与消息 ============ -->
+    <div class="main" v-show="activeView === 'friends'">
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">好友与消息</h1>
+          <div class="page-sub">勾选要续火花的好友，配置随机发送的消息模板</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary" :disabled="contactsFetching" @click="fetchContacts">
+            {{ contactsFetching ? '读取中…' : '获取聊天列表' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="card form-card">
+        <div class="card-head">
+          <span class="card-title">聊天列表</span>
+          <span style="font-size:12px;color:var(--text-4);">
+            <template v-if="contacts.length">共 {{ contacts.length }} 个聊天对象 · 更新于 {{ fmt(contactsAt) }}</template>
+            <template v-else-if="contactsError">获取失败：{{ contactsError }}</template>
+            <template v-else>点击右上角按钮从抖音聊天列表读取好友</template>
+          </span>
+        </div>
+        <div v-if="contacts.length" class="friend-checks" style="margin-bottom:16px;">
+          <el-checkbox-group v-model="selectedFriends">
+            <el-checkbox v-for="c in contacts" :key="c.name" :label="c.name" style="margin:4px 20px 4px 0;">
+              {{ c.name }}<el-tag v-if="c.streak" size="small" type="warning" style="margin-left:6px;">🔥 {{ c.streak }}</el-tag>
+            </el-checkbox>
+          </el-checkbox-group>
+        </div>
+        <el-form label-width="110px">
+          <el-form-item label="续火花好友">
+            <el-input v-model="friendsText" type="textarea" :rows="5"
+              placeholder="已选好友名单（每行一个）；也可手动补充聊天列表里显示的备注 / 昵称 / 抖音号"></el-input>
+          </el-form-item>
+          <el-form-item label="消息模板">
+            <el-input v-model="messagesText" type="textarea" :rows="5"
+              placeholder="每行一条，每次随机选择一条发送"></el-input>
+          </el-form-item>
+          <el-form-item>
+            <button class="btn btn-primary" @click.prevent="saveFriends">保存</button>
+            <button class="btn btn-plain" style="margin-left:10px;" @click.prevent="applySelection">把勾选结果写入名单</button>
+          </el-form-item>
+        </el-form>
+      </div>
+    </div>
+
+    <!-- ============ 视图 3：定时配置 ============ -->
+    <div class="main" v-show="activeView === 'settings'">
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">定时配置</h1>
+          <div class="page-sub">每天自动发送的时间与节奏，保存后立即生效</div>
+        </div>
+      </div>
+
+      <div class="card form-card" style="max-width:720px;">
+        <el-form label-width="170px">
+          <el-form-item label="每天发送时间">
+            <el-input v-model="settingsForm.schedule_time" type="time" style="width:160px;"></el-input>
+          </el-form-item>
+          <el-form-item label="时间抖动窗口（分钟）">
+            <el-input-number v-model="settingsForm.jitter_minutes" :min="0" :max="240"></el-input-number>
+            <span style="margin-left:8px;color:var(--text-4);font-size:12px;">设定时间后 0～N 分钟内随机开始，避免每天同一秒发送</span>
+          </el-form-item>
+          <el-form-item label="好友间隔（秒）">
+            <el-input-number v-model="settingsForm.send_gap_min" :min="1" :max="300"></el-input-number>
+            <span style="margin:0 6px;">至</span>
+            <el-input-number v-model="settingsForm.send_gap_max" :min="1" :max="300"></el-input-number>
+          </el-form-item>
+          <el-form-item label="每次最多发送人数">
+            <el-input-number v-model="settingsForm.max_friends_per_run" :min="0" :max="200"></el-input-number>
+            <span style="margin-left:8px;color:var(--text-4);font-size:12px;">0 表示不限制</span>
+          </el-form-item>
+          <el-form-item>
+            <button class="btn btn-primary" @click.prevent="saveSettings">保存配置</button>
+          </el-form-item>
+        </el-form>
+      </div>
+    </div>
+
+    <!-- ============ 视图 4：发送日志 ============ -->
+    <div class="main" v-show="activeView === 'logs'">
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">发送日志</h1>
+          <div class="page-sub">历史执行记录与实时运行日志</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-plain" @click="loadHistory(); loadLogs();">刷新</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">历史执行记录</span></div>
+        <div class="feed-list">
+          <div v-for="(h, i) in historyItems" :key="i" class="tl-item">
+            <div class="tl-ic" :class="h.kind">{{ h.icon }}</div>
+            <div class="tl-body">
+              <div class="tl-title">{{ h.title }}</div>
+              <div class="tl-sub">{{ h.sub }}</div>
+            </div>
+            <span class="tl-tag" :class="h.kind">{{ h.tag }}</span>
+          </div>
+          <div v-if="!historyItems.length" class="feed-empty">暂无历史记录</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">运行日志</span>
+          <el-checkbox v-model="autoRefresh">自动刷新</el-checkbox>
+        </div>
+        <pre class="log-pre">{{ logs || '暂无日志' }}</pre>
+      </div>
+    </div>
+
+    <!-- 令牌对话框 -->
     <el-dialog v-model="tokenDialog" title="访问令牌" width="360px" :close-on-click-modal="false" :show-close="false">
-      <p style="margin-top:0;color:#606266;font-size:13px;">请输入部署时生成的访问令牌（保存在服务器 .env 文件中）。</p>
+      <p style="margin-top:0;color:var(--text-3);font-size:13px;">请输入部署时生成的访问令牌（保存在服务器 .env 文件中）。</p>
       <el-input v-model="tokenInput" placeholder="访问令牌" show-password @keyup.enter="saveToken"></el-input>
       <template #footer>
-        <el-button type="primary" @click="saveToken">确定</el-button>
+        <button class="btn btn-primary" @click="saveToken">确定</button>
       </template>
     </el-dialog>
   </div>
@@ -175,201 +350,7 @@
   <script src="/static/vendor/vue.global.prod.js"></script>
   <script src="/static/vendor/element-plus.full.min.js"></script>
   <script src="/static/vendor/axios.min.js"></script>
-  <script>
-    const { createApp, ref, reactive, onMounted, onUnmounted, nextTick } = Vue;
-
-    const app = createApp({
-      setup() {
-        const tab = ref('overview');
-        const token = ref(localStorage.getItem('ds_token') || '');
-        const tokenInput = ref('');
-        const tokenDialog = ref(false);
-        const status = reactive({ state_file_exists: false, session_status: 'unknown', running: false, last_run: null, next_run: null, history_count: 0, auth_required: true });
-        const config = reactive({ schedule_time: '21:00', jitter_minutes: 30, send_gap_min: 6, send_gap_max: 12, max_friends_per_run: 20, friends: [], messages: [] });
-        const settingsForm = reactive({ schedule_time: '21:00', jitter_minutes: 30, send_gap_min: 6, send_gap_max: 12, max_friends_per_run: 20 });
-        const friendsText = ref('');
-        const messagesText = ref('');
-        const logs = ref('');
-        const autoRefresh = ref(false);
-        const uploadFile = ref(null);
-        const contacts = ref([]);
-        const contactsAt = ref('');
-        const contactsError = ref('');
-        const contactsFetching = ref(false);
-        const selectedFriends = ref([]);
-        let logTimer = null;
-
-        const api = axios.create({ baseURL: '/api', timeout: 900000 });
-        api.interceptors.request.use((cfg) => {
-          if (token.value) cfg.headers['X-Auth-Token'] = token.value;
-          return cfg;
-        });
-        api.interceptors.response.use(
-          (r) => r,
-          (err) => {
-            if (err.response && err.response.status === 401) { tokenDialog.value = true; }
-            return Promise.reject(err);
-          }
-        );
-
-        function showTokenDialog() { tokenInput.value = token.value; tokenDialog.value = true; }
-        function saveToken() {
-          token.value = tokenInput.value.trim();
-          localStorage.setItem('ds_token', token.value);
-          tokenDialog.value = false;
-          loadAll();
-        }
-
-        function fmt(iso) {
-          if (!iso) return '';
-          const d = new Date(iso);
-          return isNaN(d) ? iso : d.toLocaleString('zh-CN', { hour12: false });
-        }
-
-        async function loadStatus() {
-          try {
-            const r = await api.get('/status');
-            Object.assign(status, r.data);
-            if (r.data.auth_required && !token.value) tokenDialog.value = true;
-          } catch (e) { /* 401 handled by interceptor */ }
-        }
-        async function loadConfig() {
-          try {
-            const r = await api.get('/config');
-            Object.assign(config, r.data);
-            Object.assign(settingsForm, r.data);
-            friendsText.value = (r.data.friends || []).join('\n');
-            messagesText.value = (r.data.messages || []).join('\n');
-            selectedFriends.value = (r.data.friends || []).slice();
-          } catch (e) { /* handled */ }
-        }
-        async function loadContacts() {
-          try {
-            const r = await api.get('/contacts');
-            contacts.value = r.data.contacts || [];
-            contactsAt.value = r.data.contacts_at || '';
-            contactsError.value = r.data.contacts_error || '';
-            contactsFetching.value = !!r.data.fetching;
-          } catch (e) { /* handled */ }
-        }
-        async function fetchContacts() {
-          try {
-            await api.post('/contacts/fetch');
-            contactsFetching.value = true;
-            ElementPlus.ElMessage.info('正在读取聊天列表，可能需要半分钟左右…');
-            for (let i = 0; i < 80; i++) {
-              await new Promise((r) => setTimeout(r, 3000));
-              await loadContacts();
-              if (!contactsFetching.value) break;
-            }
-          } catch (e) {
-            ElementPlus.ElMessage.error(e.response?.data?.detail || '获取失败');
-          }
-        }
-        function applySelection() {
-          friendsText.value = selectedFriends.value.join('\n');
-          ElementPlus.ElMessage.success('已把勾选结果写入名单，记得点「保存」');
-        }
-        async function loadLogs() {
-          try {
-            const r = await api.get('/logs');
-            logs.value = r.data.logs;
-          } catch (e) { /* handled */ }
-        }
-        async function loadAll() {
-          await loadStatus();
-          await loadConfig();
-          await loadContacts();
-          await loadLogs();
-        }
-
-        function buildConfigPayload(extra) {
-          return { config: Object.assign({}, config, settingsForm, {
-            friends: friendsText.value.split('\n').map((s) => s.trim()).filter(Boolean),
-            messages: messagesText.value.split('\n').map((s) => s.trim()).filter(Boolean),
-          }, extra || {}) };
-        }
-        async function saveFriends() {
-          try {
-            await api.put('/config', buildConfigPayload());
-            await loadConfig();
-            ElementPlus.ElMessage.success('好友与消息已保存');
-          } catch (e) {
-            ElementPlus.ElMessage.error(e.response?.data?.detail || '保存失败');
-          }
-        }
-        async function saveSettings() {
-          try {
-            await api.put('/config', buildConfigPayload({ schedule_time: settingsForm.schedule_time }));
-            await loadConfig();
-            await loadStatus();
-            ElementPlus.ElMessage.success('定时设置已保存');
-          } catch (e) {
-            ElementPlus.ElMessage.error(e.response?.data?.detail || '保存失败');
-          }
-        }
-
-        async function waitForRunFinish(maxSeconds) {
-          const start = Date.now();
-          while (Date.now() - start < maxSeconds * 1000) {
-            await new Promise((r) => setTimeout(r, 5000));
-            await loadStatus();
-            if (!status.running) return;
-          }
-          ElementPlus.ElMessage.warning('等待超时，任务可能仍在后台运行');
-        }
-        async function triggerRun(dry) {
-          try {
-            const r = await api.post('/run', { dry });
-            if (r.data.started) {
-              ElementPlus.ElMessage.info(dry ? '干跑测试已启动' : '发送任务已启动');
-              await loadStatus();
-              await waitForRunFinish(1200);
-              await loadLogs();
-            }
-          } catch (e) {
-            ElementPlus.ElMessage.error(e.response?.data?.detail || '启动失败');
-          }
-        }
-
-        function onFileChange(file) { uploadFile.value = file.raw || null; }
-        function onFileRemove() { uploadFile.value = null; }
-        async function uploadState() {
-          if (!uploadFile.value) return;
-          try {
-            const fd = new FormData();
-            fd.append('file', uploadFile.value);
-            const r = await api.post('/upload-state', fd);
-            ElementPlus.ElMessage.success('登录态已上传（' + r.data.size + ' 字节）');
-            uploadFile.value = null;
-            await loadStatus();
-          } catch (e) {
-            ElementPlus.ElMessage.error(e.response?.data?.detail || '上传失败');
-          }
-        }
-
-        onMounted(async () => {
-          await loadAll();
-          logTimer = setInterval(() => {
-            loadStatus();
-            if (autoRefresh.value) loadLogs();
-          }, 20000);
-        });
-        onUnmounted(() => { if (logTimer) clearInterval(logTimer); });
-
-        return {
-          tab, status, settingsForm, friendsText, messagesText, logs, autoRefresh, uploadFile,
-          contacts, contactsAt, contactsError, contactsFetching, selectedFriends,
-          tokenDialog, tokenInput,
-          fmt, loadAll, loadLogs, loadContacts, fetchContacts, applySelection,
-          saveFriends, saveSettings, triggerRun,
-          onFileChange, onFileRemove, uploadState, showTokenDialog, saveToken,
-        };
-      },
-    });
-
-    app.use(ElementPlus);
-    app.mount('#app');
-  </script>
+  <script src="/static/js/icons.js"></script>
+  <script src="/static/js/app.js"></script>
 </body>
 </html>

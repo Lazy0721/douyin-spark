@@ -240,6 +240,13 @@ def api_logs(n: int = 300, token: str = Header(default="", alias="X-Auth-Token")
     return {"logs": "\n".join(recent_logs(max(10, min(n, 600))))}
 
 
+@app.get("/api/history")
+def api_history(token: str = Header(default="", alias="X-Auth-Token")) -> dict:
+    _check_auth(token)
+    rt = load_runtime()
+    return {"history": rt.get("history", [])}
+
+
 if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "8000"))

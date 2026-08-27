@@ -50,7 +50,7 @@ def record_run(result: dict) -> None:
     rt["last_run"] = result
     history = rt.get("history", [])
     history.insert(0, result)
-    rt["history"] = history[:30]
+    rt["history"] = history[:400]
 
     if result.get("logged_out"):
         rt["session_status"] = "expired"
