@@ -5,7 +5,8 @@
 (function () {
   const { createApp, ref, reactive, computed, onMounted, onUnmounted } = Vue;
 
-  const SUN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  const SUN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  const MOON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 
   const app = createApp({
     setup() {
@@ -40,7 +41,6 @@
 
       const nowTick = ref(Date.now());
       const heatYear = ref(new Date().getFullYear());
-      const heatMonth = ref(new Date().getMonth() + 1);
 
       let pollTimer = null;
       let tickTimer = null;
@@ -85,7 +85,7 @@
       }
 
       // ---------- 主题 ----------
-      const themeIcon = computed(() => (theme.value === 'dark' ? SUN_SVG : icons.moon));
+      const themeIcon = computed(() => (theme.value === 'dark' ? SUN_SVG : MOON_SVG));
       function toggleTheme() {
         theme.value = theme.value === 'dark' ? 'light' : 'dark';
         document.documentElement.dataset.theme = theme.value;
@@ -192,49 +192,68 @@
       });
 
       // ---------- 热力图 ----------
-      function toggleHeatYear() {
-        const cur = new Date().getFullYear();
-        heatYear.value = heatYear.value === cur ? cur - 1 : cur;
-        if (heatYear.value === cur && heatMonth.value > new Date().getMonth() + 1) {
-          heatMonth.value = new Date().getMonth() + 1;
-        }
-      }
-      function isFutureMonth(m) {
-        const now = new Date();
-        if (heatYear.value < now.getFullYear()) return false;
-        return m > now.getMonth() + 1;
-      }
+      // 只有"有数据"的年份才会出现在下拉里
+      const heatAvailableYears = computed(() => {
+        const years = new Set();
+        years.add(new Date().getFullYear());
+        realRuns.value.forEach((h) => {
+          if (h.at) years.add(new Date(h.at).getFullYear());
+        });
+        return Array.from(years).sort((a, b) => b - a);
+      });
+      // GitHub 风格：全年 53 周 × 7 天，1月1日之前的空格子不渲染
       const heatCells = computed(() => {
-        // 每天成功次数
         const perDay = {};
         realRuns.value.forEach((h) => {
           const k = dayKey(new Date(h.at));
           perDay[k] = (perDay[k] || 0) + (h.ok || []).length;
         });
         const total = Math.max(1, (config.friends || []).length);
-        // GitHub 风格：列=周（周日起），行=星期
-        const first = new Date(heatYear.value, heatMonth.value - 1, 1);
-        const start = new Date(first);
-        start.setDate(first.getDate() - first.getDay()); // 回到本周日
-        const cells = [];
-        const cursor = new Date(start);
+        const year = heatYear.value;
+
+        const jan1 = new Date(year, 0, 1);
+        const dec31 = new Date(year, 11, 31);
+        // 周一为周开始（getDay: 0=Sun, 1=Mon, ..., 6=Sat）
+        const startOffset = (jan1.getDay() + 6) % 7;
+        const startMonday = new Date(jan1);
+        startMonday.setDate(jan1.getDate() - startOffset);
+        const endOffset = 6 - dec31.getDay();
+        const endSunday = new Date(dec31);
+        endSunday.setDate(dec31.getDate() + endOffset);
+
+        const weeks = [];
+        const cursor = new Date(startMonday);
+        let lastMonth = -1;
         const now = new Date(nowTick.value);
-        while (cursor.getMonth() + 1 !== heatMonth.value || cursor.getFullYear() !== heatYear.value || cursor.getDate() <= new Date(heatYear.value, heatMonth.value, 0).getDate()) {
-          const inMonth = cursor.getFullYear() === heatYear.value && cursor.getMonth() + 1 === heatMonth.value;
-          const k = dayKey(cursor);
-          const count = inMonth ? (perDay[k] || 0) : 0;
-          const future = cursor.getTime() > now.getTime();
-          let level = 0;
-          if (inMonth && !future && count > 0) {
-            const ratio = count / total;
-            level = ratio >= 1 ? 4 : ratio >= 0.66 ? 3 : ratio >= 0.33 ? 2 : 1;
+
+        while (cursor <= endSunday) {
+          const week = { cells: [], monthLabel: null };
+          for (let d = 0; d < 7; d++) {
+            const cellDate = new Date(cursor);
+            if (cellDate.getFullYear() === year) {
+              const k = dayKey(cellDate);
+              const count = perDay[k] || 0;
+              const future = cellDate.getTime() > now.getTime();
+              let level = 0;
+              if (!future && count > 0) {
+                const ratio = count / total;
+                level = ratio >= 1 ? 4 : ratio >= 0.66 ? 3 : ratio >= 0.33 ? 2 : 1;
+              }
+              week.cells.push({ date: k, count, level });
+              // 月份 label：本月第一次出现时标记（出现在 1~7 号所在的那一周上方）
+              const m = cellDate.getMonth() + 1;
+              if (m !== lastMonth && cellDate.getDate() <= 7) {
+                week.monthLabel = m;
+                lastMonth = m;
+              }
+            } else {
+              week.cells.push(null); // 当年之外的格子不渲染
+            }
+            cursor.setDate(cursor.getDate() + 1);
           }
-          cells.push({ date: inMonth ? k : '', count, level: future ? 0 : level });
-          cursor.setDate(cursor.getDate() + 1);
-          if (cursor.getMonth() + 1 === heatMonth.value + 1 && cursor.getDay() === 0) break;
-          if (cells.length > 42) break;
+          weeks.push(week);
         }
-        return cells;
+        return weeks;
       });
 
       // ---------- 实时动态 ----------
@@ -257,7 +276,7 @@
 
       // ---------- 历史时间线 ----------
       const historyItems = computed(() => {
-        return history.value.slice(0, 20).map((h) => {
+        return history.value.map((h) => {
           const okN = (h.ok || []).length;
           const failN = (h.failed || []).filter((f) => f.name !== '_system').length;
           const sysErr = (h.failed || []).find((f) => f.name === '_system');
@@ -274,6 +293,10 @@
           };
         });
       });
+      // 卡片上只展示前 3 条，剩余的通过"查看所有"对话框展示
+      const historyItemsShown = computed(() => historyItems.value.slice(0, 3));
+      const historyDialog = ref(false);
+      function openHistoryDialog() { historyDialog.value = true; }
 
       // ---------- 数据加载 ----------
       async function loadStatus() {
@@ -329,23 +352,42 @@
         tokenDialog.value = false;
         loadAll();
       }
+      // 统一通知：右侧顶部、避开顶栏（offset 70）、最多 2s、可手动关闭
+      const notify = {
+        success: (text) => ElementPlus.ElNotification({
+          type: 'success', title: '成功', message: text,
+          position: 'top-right', offset: 50, duration: 2000, showClose: true,
+        }),
+        error: (text) => ElementPlus.ElNotification({
+          type: 'error', title: '失败', message: text,
+          position: 'top-right', offset: 50, duration: 2000, showClose: true,
+        }),
+        warning: (text) => ElementPlus.ElNotification({
+          type: 'warning', title: '提示', message: text,
+          position: 'top-right', offset: 50, duration: 2000, showClose: true,
+        }),
+        info: (text) => ElementPlus.ElNotification({
+          type: 'info', title: '提示', message: text,
+          position: 'top-right', offset: 50, duration: 2000, showClose: true,
+        }),
+      };
       async function fetchContacts() {
         try {
           await api.post('/contacts/fetch');
           contactsFetching.value = true;
-          ElementPlus.ElMessage.info('正在读取聊天列表，可能需要半分钟左右…');
+          notify.info('正在读取聊天列表，可能需要半分钟左右…');
           for (let i = 0; i < 80; i++) {
             await new Promise((r) => setTimeout(r, 3000));
             await loadContacts();
             if (!contactsFetching.value) break;
           }
         } catch (e) {
-          ElementPlus.ElMessage.error(e.response?.data?.detail || '获取失败');
+          notify.error(e.response?.data?.detail || '获取失败');
         }
       }
       function applySelection() {
         friendsText.value = selectedFriends.value.join('\n');
-        ElementPlus.ElMessage.success('已把勾选结果写入名单，记得点「保存」');
+        notify.success('已把勾选结果写入名单，记得点「保存」');
       }
       function buildConfigPayload(extra) {
         return { config: Object.assign({}, config, settingsForm, {
@@ -357,9 +399,9 @@
         try {
           await api.put('/config', buildConfigPayload());
           await loadConfig();
-          ElementPlus.ElMessage.success('好友与消息已保存');
+          notify.success('好友与消息已保存');
         } catch (e) {
-          ElementPlus.ElMessage.error(e.response?.data?.detail || '保存失败');
+          notify.error(e.response?.data?.detail || '保存失败');
         }
       }
       async function saveSettings() {
@@ -367,9 +409,9 @@
           await api.put('/config', buildConfigPayload({ schedule_time: settingsForm.schedule_time }));
           await loadConfig();
           await loadStatus();
-          ElementPlus.ElMessage.success('定时配置已保存');
+          notify.success('定时配置已保存');
         } catch (e) {
-          ElementPlus.ElMessage.error(e.response?.data?.detail || '保存失败');
+          notify.error(e.response?.data?.detail || '保存失败');
         }
       }
       async function waitForRunFinish(maxSeconds) {
@@ -379,20 +421,20 @@
           await loadStatus();
           if (!status.running) return;
         }
-        ElementPlus.ElMessage.warning('等待超时，任务可能仍在后台运行');
+        notify.warning('等待超时，任务可能仍在后台运行');
       }
       async function triggerRun(dry) {
         try {
           const r = await api.post('/run', { dry });
           if (r.data.started) {
-            ElementPlus.ElMessage.info(dry ? '干跑测试已启动' : '发送任务已启动');
+            notify.info(dry ? '干跑测试已启动' : '发送任务已启动');
             await loadStatus();
             await waitForRunFinish(1200);
             await loadHistory();
             await loadLogs();
           }
         } catch (e) {
-          ElementPlus.ElMessage.error(e.response?.data?.detail || '启动失败');
+          notify.error(e.response?.data?.detail || '启动失败');
         }
       }
       function onFileChange(file) { uploadFile.value = file.raw || null; }
@@ -403,11 +445,11 @@
           const fd = new FormData();
           fd.append('file', uploadFile.value);
           const r = await api.post('/upload-state', fd);
-          ElementPlus.ElMessage.success('登录态已上传（' + r.data.size + ' 字节）');
+          notify.success('登录态已上传（' + r.data.size + ' 字节）');
           uploadFile.value = null;
           await loadStatus();
         } catch (e) {
-          ElementPlus.ElMessage.error(e.response?.data?.detail || '上传失败');
+          notify.error(e.response?.data?.detail || '上传失败');
         }
       }
 
@@ -433,12 +475,12 @@
         tokenDialog, tokenInput,
         sessionTagClass, sessionTagText, todayText,
         todayStats, ringDash, ringOffset, ringTrack, countdownText,
-        streak, heatYear, heatMonth, heatCells, feedItems, historyItems,
+        streak, heatYear, heatAvailableYears, heatCells,
+        feedItems, historyItems, historyItemsShown, historyDialog, openHistoryDialog,
         fmt, fmtShort, goView, toggleTheme, showTokenDialog, saveToken,
         loadAll, loadLogs, loadHistory, fetchContacts, applySelection,
         saveFriends, saveSettings, triggerRun,
         onFileChange, onFileRemove, uploadState,
-        toggleHeatYear, isFutureMonth,
       };
     },
   });

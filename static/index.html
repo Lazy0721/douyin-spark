@@ -117,7 +117,7 @@
         </div>
 
         <!-- 火花连击 -->
-        <div class="card">
+        <div class="card streak-card">
           <div class="card-head"><span class="card-title">火花连胜</span></div>
           <div class="streak-mid">
             <div class="flame-block">
@@ -148,15 +148,39 @@
 
       <!-- 热力图 -->
       <div class="heat-section-head">
-        <span class="heat-title">月度火花打卡 · 热力图</span>
-        <button class="heat-year-btn" @click="toggleHeatYear">{{ heatYear }}</button>
+        <span class="heat-title">年度火花打卡 · 热力图</span>
+        <el-select v-model="heatYear" size="small" class="heat-year-select">
+          <el-option v-for="y in heatAvailableYears" :key="y" :label="y + ' 年'" :value="y"></el-option>
+        </el-select>
       </div>
-      <div class="heat-layout">
-        <div class="card heat-card">
-          <div class="heat-grid">
-            <div v-for="(cell, i) in heatCells" :key="i" class="heat-cell"
-                 :class="cell.level ? 'lv' + cell.level : ''"
-                 :title="cell.date ? cell.date + (cell.count ? ' · 成功 ' + cell.count + ' 次' : ' · 无记录') : ''"></div>
+      <div class="card heat-card">
+          <div class="heat-content">
+            <div class="heat-weekdays">
+              <span></span>
+              <span>一</span>
+              <span></span>
+              <span>三</span>
+              <span></span>
+              <span>五</span>
+              <span></span>
+            </div>
+            <div class="heat-main">
+              <div class="heat-month-row">
+                <span v-for="(w, wi) in heatCells" :key="'ml' + wi" class="heat-month-cell">
+                  {{ w.monthLabel ? w.monthLabel + '月' : '' }}
+                </span>
+              </div>
+              <div class="heat-grid">
+                <div v-for="(week, wi) in heatCells" :key="'w' + wi" class="heat-week">
+                  <template v-for="(cell, di) in week.cells" :key="wi + '-' + di">
+                    <div v-if="cell" class="heat-cell"
+                          :class="cell.level ? 'lv' + cell.level : ''"
+                          :style="{ gridRow: di + 1 }"
+                          :title="cell.date + (cell.count ? ' · 成功 ' + cell.count + ' 次' : ' · 无记录')"></div>
+                  </template>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="heat-legend">
             少
@@ -167,13 +191,6 @@
             <span class="heat-cell lv4"></span>
             多
           </div>
-        </div>
-        <div class="card heat-months">
-          <button v-for="m in 12" :key="m" class="heat-month"
-                  :class="{ active: heatMonth === m }"
-                  :disabled="isFutureMonth(m)"
-                  @click="heatMonth = m">{{ m }} 月</button>
-        </div>
       </div>
 
       <!-- 底部两栏 -->
@@ -276,7 +293,7 @@
         </div>
       </div>
 
-      <div class="card form-card" style="max-width:720px;">
+      <div class="card form-card">
         <el-form label-width="170px">
           <el-form-item label="每天发送时间">
             <el-input v-model="settingsForm.schedule_time" type="time" style="width:160px;"></el-input>
@@ -314,9 +331,12 @@
       </div>
 
       <div class="card">
-        <div class="card-head"><span class="card-title">历史执行记录</span></div>
+        <div class="card-head">
+          <span class="card-title">历史执行记录</span>
+          <span v-if="historyItems.length > 3" class="card-link" @click="openHistoryDialog">查看所有 →</span>
+        </div>
         <div class="feed-list">
-          <div v-for="(h, i) in historyItems" :key="i" class="tl-item">
+          <div v-for="(h, i) in historyItemsShown" :key="i" class="tl-item">
             <div class="tl-ic" :class="h.kind">{{ h.icon }}</div>
             <div class="tl-body">
               <div class="tl-title">{{ h.title }}</div>
@@ -324,7 +344,7 @@
             </div>
             <span class="tl-tag" :class="h.kind">{{ h.tag }}</span>
           </div>
-          <div v-if="!historyItems.length" class="feed-empty">暂无历史记录</div>
+          <div v-if="!historyItemsShown.length" class="feed-empty">暂无历史记录</div>
         </div>
       </div>
 
@@ -344,6 +364,23 @@
       <template #footer>
         <button class="btn btn-primary" @click="saveToken">确定</button>
       </template>
+    </el-dialog>
+
+    <!-- 历史执行记录对话框 -->
+    <el-dialog v-model="historyDialog" title="历史执行记录" width="640px">
+      <el-scrollbar height="60vh">
+        <div class="feed-list">
+          <div v-for="(h, i) in historyItems" :key="i" class="tl-item">
+            <div class="tl-ic" :class="h.kind">{{ h.icon }}</div>
+            <div class="tl-body">
+              <div class="tl-title">{{ h.title }}</div>
+              <div class="tl-sub">{{ h.sub }}</div>
+            </div>
+            <span class="tl-tag" :class="h.kind">{{ h.tag }}</span>
+          </div>
+          <div v-if="!historyItems.length" class="feed-empty">暂无历史记录</div>
+        </div>
+      </el-scrollbar>
     </el-dialog>
   </div>
 

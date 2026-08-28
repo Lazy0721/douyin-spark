@@ -350,11 +350,15 @@ body {
 .mini-card-sub { font-size: 12px; color: var(--text-2); }
 
 /* 火花连击 */
+.streak-card {
+  display: flex;
+  flex-direction: column; /* 让 .streak-mid 用 margin-top: auto 贴底 */
+}
 .streak-mid {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin: 12px 0 16px;
+  padding-top: 16px;
 }
 .flame-block {
   width: 81px;
@@ -374,7 +378,7 @@ body {
   line-height: 1.15;
 }
 .streak-sub { font-size: 14px; font-weight: 700; color: var(--text-3); margin-top: 4px; }
-.streak-lines { display: flex; flex-direction: column; gap: 8px; }
+.streak-lines { display: flex; flex-direction: column; gap: 8px; margin-top: 2.5em; }
 .streak-line {
   display: flex;
   justify-content: space-between;
@@ -418,34 +422,65 @@ body {
   justify-content: space-between;
 }
 .heat-title { font-size: 16px; font-weight: 600; }
-.heat-year-btn {
-  padding: 5px 14px;
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  border: none;
-  cursor: pointer;
+.heat-year-select {
+  width: 110px;
+}
+.heat-card {
+  overflow-x: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center; /* 卡片宽度够时居中；溢出时通过 overflow-x 滚动 */
+}
+.heat-content { 
+  display: flex;
+  gap: 6px;
+  padding: 15px;
+  padding-bottom: 4px;
+  width: max-content; /* 容器只占内容宽度，配合父级居中 */
+  margin: 0 auto;
+}
+.heat-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, 13px);
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-4);
+  align-self: start;
+  margin-top: 18px; /* 与月份 label 行错开 */
+}
+.heat-weekdays span {
+  height: 13px;
+  line-height: 13px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  padding-right: 2px;
 }
-.heat-layout {
-  display: grid;
-  grid-template-columns: 1fr 145px;
-  gap: 16px;
+.heat-main { min-width: 0; }
+.heat-month-row {
+  display: flex;
+  height: 16px;
+  margin-bottom: 2px;
 }
-.heat-card { overflow-x: auto; }
+.heat-month-cell {
+  width: 13px;
+  margin-right: 3px;
+  font-size: 10px;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: visible;
+  line-height: 14px;
+}
 .heat-grid {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(7, 13px);
-  grid-auto-columns: 13px;
-  gap: 3px;
-  width: max-content;
+  display: flex;
+  gap: 0;
 }
+.heat-week {
+  display: grid;
+  grid-template-rows: repeat(7, 13px);
+  gap: 3px;
+  margin-right: 3px;
+}
+.heat-week:last-child { margin-right: 0; }
 .heat-cell {
   width: 13px;
   height: 13px;
@@ -464,28 +499,6 @@ body {
   margin-top: 10px;
   font-size: 11px;
   color: var(--text-4);
-}
-.heat-months {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.heat-month {
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--text-4);
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  text-align: left;
-}
-.heat-month:hover { background: var(--surface-hover); }
-.heat-month.active {
-  font-weight: 800;
-  font-size: 16px;
-  color: var(--text);
-  background: var(--surface-mute);
 }
 
 /* ---------- 底部两栏 ---------- */
@@ -588,7 +601,7 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 0;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border-soft);
 }
 .tl-item:last-child { border-bottom: none; }
@@ -637,3 +650,11 @@ body {
   .topbar-nav .nav-label { display: none; }
   .main { padding: 16px; }
 }
+
+/* ---------- 通知/弹窗微调 ---------- */
+.el-notification {
+  width: 260px !important;
+  border-radius: 10px !important;
+}
+.el-notification__title { font-weight: 600; }
+.el-scrollbar__wrap { overflow-x: hidden; } /* 历史弹窗用 el-scrollbar，避免横向滚动条 */
