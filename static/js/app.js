@@ -127,12 +127,32 @@
       // ---------- 今日统计 ----------
       const todayStats = computed(() => {
         const total = (config.friends || []).length;
-        const lr = status.last_run;
-        const isToday = lr && lr.at && dayKey(new Date(lr.at)) === dayKey(new Date(nowTick.value)) && !lr.dry_run;
-        const ok = isToday ? (lr.ok || []).length : 0;
-        const fail = isToday ? (lr.failed || []).filter((f) => f.name !== '_system').length : 0;
+        const todayKeyStr = dayKey(new Date(nowTick.value));
+
+        // 1. 过滤出今天所有的“非干跑（真实发送）”运行记录
+        const todayRealRuns = (history.value || []).filter((h) => {
+          return h.at && !h.dry_run && dayKey(new Date(h.at)) === todayKeyStr;
+        });
+
+        // 2. 收集今天所有真实运行过的成功/失败名单（去重）
+        const okSet = new Set();
+        const failSet = new Set();
+
+        todayRealRuns.forEach((h) => {
+          (h.ok || []).forEach((name) => okSet.add(name));
+          (h.failed || [])
+            .filter((f) => f.name !== '_system')
+            .forEach((f) => failSet.add(f.name));
+        });
+
+        // 如果某个好友在今天后来的运行中成功了，则从失败列表中剔除
+        okSet.forEach((name) => failSet.delete(name));
+
+        const ok = okSet.size;
+        const fail = failSet.size;
         const pending = Math.max(0, total - ok - fail);
         const pct = total ? Math.round((ok / total) * 100) : 0;
+
         return { ok, fail, pending, total, pct };
       });
 
@@ -155,40 +175,70 @@
       // ---------- 火花连胜 ----------
       const realRuns = computed(() => history.value.filter((h) => !h.dry_run));
       const streak = computed(() => {
-        // 连续天数：从今天/昨天往前，每天至少有 1 条 ok 记录
-        const daysWithOk = new Set();
-        realRuns.value.forEach((h) => {
-          if ((h.ok || []).length > 0 && !h.logged_out) daysWithOk.add(dayKey(new Date(h.at)));
+        let maxDays = 0;      // 全员最高连胜天数
+        let topFriend = '';   // 最高连胜的好友名字
+        let activeCount = 0;  // 当前保持续火花的好友总数
+
+        // 1. 从 contacts 权威解析最高连胜天数
+        (contacts.value || []).forEach((c) => {
+          if (!c.streak) return;
+
+          let days = 0;
+          const str = String(c.streak).trim();
+
+          if (/^\d+$/.test(str)) {
+            days = parseInt(str, 10);
+          } else if (str.includes('重燃')) {
+            const match = str.match(/\d+/);
+            days = match ? parseInt(match[0], 10) : 0;
+          }
+
+          if (days > 0) {
+            activeCount++;
+            if (days > maxDays) {
+              maxDays = days;
+              topFriend = c.name;
+            }
+          }
         });
-        let days = 0;
-        const cursor = new Date(nowTick.value);
-        if (!daysWithOk.has(dayKey(cursor))) cursor.setDate(cursor.getDate() - 1); // 今天还没跑就从昨天起
-        while (daysWithOk.has(dayKey(cursor))) {
-          days++;
-          cursor.setDate(cursor.getDate() - 1);
-        }
-        // 近 7 天成功率
+
+        // 2. 近 7 天成功率
         const weekAgo = Date.now() - 7 * 86400000;
         let ok7 = 0, fail7 = 0;
-        realRuns.value.forEach((h) => {
+        const realRuns = (history.value || []).filter((h) => !h.dry_run);
+
+        realRuns.forEach((h) => {
           if (new Date(h.at).getTime() >= weekAgo) {
             ok7 += (h.ok || []).length;
             fail7 += (h.failed || []).filter((f) => f.name !== '_system').length;
           }
         });
         const weekRate = ok7 + fail7 ? Math.round((ok7 / (ok7 + fail7)) * 100) : 100;
-        // 本周（周一起）
+
+        // 3. 本周（周一起）发送统计（恢复 weekOk 与 weekTotal）
         const now = new Date(nowTick.value);
         const monday = new Date(now);
         monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
         monday.setHours(0, 0, 0, 0);
+
         let weekOk = 0;
-        realRuns.value.forEach((h) => {
-          if (new Date(h.at).getTime() >= monday.getTime()) weekOk += (h.ok || []).length;
+        realRuns.forEach((h) => {
+          if (new Date(h.at).getTime() >= monday.getTime()) {
+            weekOk += (h.ok || []).length;
+          }
         });
+
         const daysPassed = Math.floor((now - monday) / 86400000) + 1;
         const weekTotal = daysPassed * (config.friends || []).length;
-        return { days, weekRate, weekOk, weekTotal };
+
+        return {
+          days: maxDays,        // 最高连胜天数
+          topFriend,           // 榜首好友
+          activeCount,         // 有火花好友数
+          weekRate,            // 近7天成功率
+          weekOk,              // 本周成功次数（恢复 HTML 绑定）
+          weekTotal,           // 本周应续总次数（恢复 HTML 绑定）
+        };
       });
 
       // ---------- 热力图 ----------
@@ -261,17 +311,17 @@
         const items = [];
         for (const h of history.value.slice(0, 3)) {
           const when = relTime(h.at);
-          (h.ok || []).slice(0, 1).forEach((n) => {
+          (h.ok || []).forEach((n) => {
             items.push({ ok: true, title: `${n} 续火花${h.dry_run ? '（干跑）' : '成功'}`, sub: fmt(h.at), time: when });
           });
-          (h.failed || []).filter((f) => f.name !== '_system').slice(0, 1).forEach((f) => {
+          (h.failed || []).filter((f) => f.name !== '_system').forEach((f) => {
             items.push({ ok: false, title: `${f.name} 续火花失败`, sub: `${f.reason || ''} · ${fmt(h.at)}`, time: when });
           });
           if (!items.length && ((h.ok || []).length || (h.failed || []).length)) {
             items.push({ ok: !(h.failed || []).length, title: `一次任务：成功 ${(h.ok || []).length} / 失败 ${(h.failed || []).length}`, sub: fmt(h.at), time: when });
           }
         }
-        return items.slice(0, 3);
+        return items.slice(0, 5);
       });
 
       // ---------- 历史时间线 ----------
@@ -425,17 +475,18 @@
       }
       async function triggerRun(dry) {
         try {
-          const r = await api.post('/run', { dry });
-          if (r.data.started) {
-            notify.info(dry ? '干跑测试已启动' : '发送任务已启动');
-            await loadStatus();
-            await waitForRunFinish(1200);
-            await loadHistory();
-            await loadLogs();
-          }
+            const r = await api.post('/run', { dry });
+            if (r.data.started) {
+              notify.info(dry ? '干跑测试已启动' : '发送任务已启动');
+              await loadStatus();
+              await waitForRunFinish(1200);
+              await loadHistory();
+              await loadLogs();
+            }
         } catch (e) {
           notify.error(e.response?.data?.detail || '启动失败');
         }
+        await fetchContacts();
       }
       function onFileChange(file) { uploadFile.value = file.raw || null; }
       function onFileRemove() { uploadFile.value = null; }
