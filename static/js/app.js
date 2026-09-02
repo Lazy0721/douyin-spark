@@ -308,40 +308,61 @@
 
       // ---------- 实时动态 ----------
       const feedItems = computed(() => {
-        const items = [];
-        for (const h of history.value.slice(0, 3)) {
-          const when = relTime(h.at);
-          (h.ok || []).forEach((n) => {
-            items.push({ ok: true, title: `${n} 续火花${h.dry_run ? '（干跑）' : '成功'}`, sub: fmt(h.at), time: when });
-          });
-          (h.failed || []).filter((f) => f.name !== '_system').forEach((f) => {
-            items.push({ ok: false, title: `${f.name} 续火花失败`, sub: `${f.reason || ''} · ${fmt(h.at)}`, time: when });
-          });
-          if (!items.length && ((h.ok || []).length || (h.failed || []).length)) {
-            items.push({ ok: !(h.failed || []).length, title: `一次任务：成功 ${(h.ok || []).length} / 失败 ${(h.failed || []).length}`, sub: fmt(h.at), time: when });
-          }
-        }
-        return items.slice(0, 5);
+        return history.value.slice(0, 5).map((h) => {
+          const okN = (h.ok || []).length;
+          const failN = (h.failed || []).filter((f) => f.name !== '_system').length;
+          const sysErr = (h.failed || []).find((f) => f.name === '_system');
+          let kind = 'ok', icon = '✓';
+          if (h.dry_run) { kind = 'dry'; icon = '🧪'; }
+          else if (h.logged_out || h.rate_limited || failN || sysErr) { kind = okN ? 'part' : 'fail'; icon = okN ? '◐' : '✕'; }
+          return {
+            kind,
+            icon,
+            title: `${h.dry_run ? '干跑测试' : '发送任务'} · ${fmt(h.at)}`,
+            sub: `成功 ${okN} 人 · 失败 ${failN} 人${sysErr ? ' · ' + sysErr.reason : ''}${h.rate_limited ? ' · 命中限流' : ''}`,
+            time: relTime(h.at),
+          };
+        });
       });
 
       // ---------- 历史时间线 ----------
       const historyItems = computed(() => {
-        return history.value.map((h) => {
-          const okN = (h.ok || []).length;
-          const failN = (h.failed || []).filter((f) => f.name !== '_system').length;
-          const sysErr = (h.failed || []).find((f) => f.name === '_system');
-          let kind = 'ok', icon = '✓', tag = '全部成功';
-          if (h.dry_run) { kind = 'dry'; icon = '🧪'; tag = '干跑'; }
-          else if (h.logged_out) { kind = 'fail'; icon = '✕'; tag = '登录过期'; }
-          else if (h.rate_limited) { kind = 'fail'; icon = '✕'; tag = '限流停止'; }
-          else if (failN && okN) { kind = 'part'; icon = '◐'; tag = '部分成功'; }
-          else if (failN || sysErr) { kind = 'fail'; icon = '✕'; tag = '失败'; }
-          return {
-            kind, icon, tag,
-            title: `${h.dry_run ? '干跑测试' : '发送任务'} · ${fmt(h.at)}`,
-            sub: `成功 ${okN} 人 · 失败 ${failN} 人${sysErr ? ' · ' + sysErr.reason : ''}${h.rate_limited ? ' · 命中限流' : ''}`,
-          };
-        });
+        const items = [];
+        for (const h of history.value) {
+          const when = relTime(h.at);
+          let addedForRun = false;
+          (h.ok || []).forEach((n) => {
+            items.push({
+              kind: 'ok',
+              icon: '✓',
+              tag: h.dry_run ? '干跑' : '成功',
+              title: `${n} 续火花${h.dry_run ? '（干跑）' : '成功'}`,
+              sub: `${fmt(h.at)} · ${when}`,
+            });
+            addedForRun = true;
+          });
+          (h.failed || []).filter((f) => f.name !== '_system').forEach((f) => {
+            items.push({
+              kind: 'fail',
+              icon: '✕',
+              tag: h.rate_limited ? '限流停止' : '失败',
+              title: `${f.name} 续火花失败`,
+              sub: `${f.reason || ''} · ${fmt(h.at)} · ${when}`,
+            });
+            addedForRun = true;
+          });
+          if (!addedForRun && ((h.ok || []).length || (h.failed || []).length)) {
+            const sysErr = (h.failed || []).find((f) => f.name === '_system');
+            items.push({
+              kind: (h.failed || []).length ? 'fail' : 'ok',
+              icon: (h.failed || []).length ? '✕' : '✓',
+              tag: (h.failed || []).length ? '失败' : '成功',
+              title: `一次任务：成功 ${(h.ok || []).length} / 失败 ${(h.failed || []).length}`,
+              sub: `${sysErr ? sysErr.reason + ' · ' : ''}${fmt(h.at)} · ${when}`,
+            });
+          }
+        }
+        return items;
       });
       // 卡片上只展示前 3 条，剩余的通过"查看所有"对话框展示
       const historyItemsShown = computed(() => historyItems.value.slice(0, 3));

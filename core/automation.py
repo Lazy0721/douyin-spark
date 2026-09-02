@@ -102,6 +102,22 @@ def _find_contact(page, name: str):
     return page.locator(".conversationConversationItemtitle").filter(has_text=name).first
 
 
+def _visible_contact_title(page, name: str):
+    """只返回左侧聊天列表里可见的精确标题，避开虚拟列表保留的隐藏旧节点。"""
+    titles = page.locator(".conversationConversationItemtitle")
+    count = titles.count()
+    for i in range(count):
+        item = titles.nth(i)
+        try:
+            text = (item.inner_text(timeout=1000) or "").strip()
+            box = item.bounding_box(timeout=1000)
+        except Exception:
+            continue
+        if text == name and box and box.get("x", 9999) < 360:
+            return item
+    return None
+
+
 def verify_in_conversation(page, name: str) -> bool:
     """右侧会话顶部标题区域（x>300 且 y<100）出现目标昵称才算切换成功，防止错发。"""
     for exact in (True, False):
@@ -188,10 +204,10 @@ def _wait_input_cleared(input_box, msg_text: str, wait: float = 8) -> bool:
 
 def send_to_contact(page, name: str, msg_text: str, dry_run: bool) -> tuple[bool, str]:
     switched = False
-    for attempt in range(5):
+    for attempt in range(12):
         try:
-            target = _find_contact(page, name)
-            if target.count():
+            target = _visible_contact_title(page, name)
+            if target:
                 target.click(force=True, timeout=10000)
                 time.sleep(random.uniform(2, 4))
                 if verify_in_conversation(page, name):
@@ -201,7 +217,7 @@ def send_to_contact(page, name: str, msg_text: str, dry_run: bool) -> tuple[bool
                 # 目标可能因列表懒加载尚未渲染，滚动侧边栏继续找
                 try:
                     page.mouse.move(200, 350)
-                    page.mouse.wheel(0, 600)
+                    page.mouse.wheel(0, 450)
                 except Exception:
                     pass
                 time.sleep(1.5)
@@ -289,7 +305,7 @@ def fetch_chat_contacts() -> dict:
                 result["error"] = "无法打开抖音私信页面"
                 return result
 
-            page.wait_for_timeout(10000)
+            page.wait_for_timeout(15000)
             logged, why = check_login(page)
             if not logged:
                 result["error"] = why
@@ -301,17 +317,29 @@ def fetch_chat_contacts() -> dict:
                     const seen = new Set();
                     document.querySelectorAll('.conversationConversationItemtitle').forEach(t => {
                         const name = (t.textContent || '').trim();
-                        if (!name || seen.has(name)) return;
+                        if (!name || /^\\d{8,}$/.test(name) || seen.has(name)) return;
                         seen.add(name);
-                        const wrap = t.parentElement;
-                        const s = wrap ? wrap.querySelector('.commonStreaknormalText') : null;
-                        out.push({ name: name, streak: s ? (s.textContent || '').trim() : '' });
+
+                        let streak = '';
+                        let row = t.parentElement;
+                        for (let i = 0; row && i < 10; i += 1) {
+                            const titles = row.querySelectorAll('.conversationConversationItemtitle');
+                            if (titles.length > 1) break;
+                            const s = row.querySelector('.commonStreaknormalText');
+                            if (s) {
+                                streak = (s.textContent || '').trim();
+                                break;
+                            }
+                            row = row.parentElement;
+                        }
+
+                        out.push({ name: name, streak: streak });
                     });
                     return out;
                 }
             """
 
-            collected: list[dict] = []
+            collected_by_name: dict[str, dict] = {}
             for attempt in range(3):
                 try:
                     page.wait_for_selector(".conversationConversationItemtitle", timeout=45000)
@@ -319,24 +347,37 @@ def fetch_chat_contacts() -> dict:
                     logger.info("第 %s 次等待联系人列表超时", attempt + 1)
 
                 stable = 0
-                for _ in range(20):
-                    data = page.evaluate(extract_js) or []
-                    new_items = [x for x in data if x not in collected]
-                    if new_items:
-                        collected.extend(new_items)
+                last_snapshot: list[dict] = []
+                for _ in range(35):
+                    data = []
+                    for _sample in range(3):
+                        data = page.evaluate(extract_js) or []
+                        for item in data:
+                            name = str(item.get("name", "")).strip()
+                            if not name:
+                                continue
+                            old = collected_by_name.get(name)
+                            if old is None or (not old.get("streak") and item.get("streak")):
+                                collected_by_name[name] = item
+                        page.wait_for_timeout(700)
+
+                    changed = data != last_snapshot
+                    last_snapshot = data
+
+                    if changed:
                         stable = 0
                     else:
                         stable += 1
-                        if stable >= 2:
+                        if stable >= 4 and collected_by_name:
                             break
                     try:
                         page.mouse.move(200, 350)
-                        page.mouse.wheel(0, 800)
+                        page.mouse.wheel(0, 300)
                     except Exception:
                         pass
-                    page.wait_for_timeout(1200)
+                    page.wait_for_timeout(1800)
 
-                if collected:
+                if collected_by_name:
                     break
                 try:
                     page.reload(wait_until="domcontentloaded", timeout=90000)
@@ -344,7 +385,7 @@ def fetch_chat_contacts() -> dict:
                 except Exception:
                     pass
 
-            result["names"] = collected
+            result["names"] = list(collected_by_name.values())
             logger.info("已读取聊天列表联系人 %s 个", len(result["names"]))
         finally:
             if browser:

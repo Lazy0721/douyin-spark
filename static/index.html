@@ -202,7 +202,7 @@
           </div>
           <div class="feed-list">
             <div v-for="(f, i) in feedItems" :key="i" class="feed-item">
-              <div class="feed-ic" :class="f.ok ? 'ok' : 'fail'">{{ f.ok ? '✓' : '✕' }}</div>
+              <div class="feed-ic" :class="f.kind || (f.ok ? 'ok' : 'fail')">{{ f.icon || (f.ok ? '✓' : '✕') }}</div>
               <div class="feed-body">
                 <div class="feed-title">{{ f.title }}</div>
                 <div class="feed-sub">{{ f.sub }}</div>
@@ -255,7 +255,8 @@
         <div class="card-head">
           <span class="card-title">聊天列表</span>
           <span style="font-size:12px;color:var(--text-4);">
-            <template v-if="contacts.length">共 {{ contacts.length }} 个聊天对象 · 更新于 {{ fmt(contactsAt) }}</template>
+            <template v-if="contactsFetching">正在重新读取，下面暂为上次缓存 · 更新于 {{ fmt(contactsAt) }}</template>
+            <template v-else-if="contacts.length">共 {{ contacts.length }} 个聊天对象 · 更新于 {{ fmt(contactsAt) }}</template>
             <template v-else-if="contactsError">获取失败：{{ contactsError }}</template>
             <template v-else>点击右上角按钮从抖音聊天列表读取好友</template>
           </span>
